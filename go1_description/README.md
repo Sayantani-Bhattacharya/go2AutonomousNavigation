@@ -1,6 +1,7 @@
 # Go1 Description
 
 **Author**: Katie Hughes, Nick Morales
+**Additional Modifications** : Sayantani Bhattacharya
 
 This is a ROS2 package to visualize the Unitree Go1 in rviz. 
 
@@ -9,7 +10,7 @@ The URDF and meshes were taken from the
 
 ![Go1 rviz visualization](images/go1_rviz.png?raw=true "Go1 rviz visualization")
 
-## To Run:
+## To visualise in Rviz:
 Run `ros2 launch go1_description load_go1.launch.py` to load the robot model.
 
 ### Launch Arguments:
@@ -19,5 +20,7 @@ Run `ros2 launch go1_description load_go1.launch.py` to load the robot model.
   * `fixed_frame`: Fixed frame for RVIZ. Default is 'base'.
   * `namespace`: Choose a namespace for the launched topics. Default is ''.
 
+## To simulate in Gazebo.
 
+Run `ros2 launch go1_description simulate.launch.xml` inside the Main repo.
 
