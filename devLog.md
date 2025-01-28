@@ -4,6 +4,25 @@ Author: Sayantani Bhattacharya </br>
 </br>
 This DevLog documents the progress of the project, to keep track for me and as a reference to anyone else who wishes to work on something similar.
 
+
+## Week3:
+
+#### (a) Accomplishments
+  1. Jetson setup with ubuntu and all the binaries done and tested.
+     Suggestion: After an initial trial, install libraries and ROS2 Humble directly from source, easier way in for Jetson.
+  3. Got the GO1 to work, powered by jetson in the high level mode, using wifi.
+  4. Read and saw tutorials for network architecture, to develop a peer-to-peer network.
+
+#### (b) Unresolved Problems:
+  1. The Zed camera Diagnostic tool is failing in jetson. Which most likely is a GSLM driver compatibility problem.
+
+#### (c) Plans: 
+  1. Fix the camera-jetson compatibility issue.
+  2. Get GO1 to perform a basic Navigation and map creation from slam task.
+  3. Get familiarized with the unitree_ros2 sdk for GO2, and to get the system to work with ethernet/WiFi.
+  4. Start developing the peer-to-peer network.
+
+
 ## Week2:
 
 #### (a) Accomplishments
