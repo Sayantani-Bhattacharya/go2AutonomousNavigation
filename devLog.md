@@ -4,6 +4,11 @@ Author: Sayantani Bhattacharya </br>
 </br>
 This DevLog documents the progress of the project, to keep track for me and as a reference to anyone else who wishes to work on something similar.
 
+## Week4:
+
+Preliminary Results: </br>
+![GO1 high level control](https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/go1_high_lvl_results.mp4) </br>
+![GO2 high level control](https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/go2_High_lvl_results.mp4) </br>
 
 ## Week3:
 
