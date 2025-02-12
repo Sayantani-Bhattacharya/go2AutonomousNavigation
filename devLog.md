@@ -4,12 +4,45 @@ Author: Sayantani Bhattacharya </br>
 </br>
 This DevLog documents the progress of the project, to keep track for me and as a reference to anyone else who wishes to work on something similar.
 
+## Week5:
+
+#### (a) Accomplishments
+  1. Self calibrated and resolved the depth image issue in ZED.
+  2. Successfully had a test run Autonomous Navigation for GO1.
+  3. Point cloud data for both GO2 4D Lidar, and Zed stereo camera can be visualized in rviz.
+
+#### (b) Preliminary Results: 
+  1. ![GO1 Navigation]([https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/go1_high_lvl_results.mp4](https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/GO1_Nav_first_run.mp4))
+    
+#### (c) Unresolved Problems:
+  1. Point cloud to occupancy-grid conversion for Nav2 for GO1.
+
+#### (d) Plans: 
+  1. Develop a way to generate occupancy-grids from point clouds.
+  2. Create/Understand a pipeline for saving maps after frontier based exploration (go1).
+  3. Write the navigation for go2.
+  4. Start developing the Distributed network’s MVP.
+  5. Develop a way to convert 4d lidar data to generate maps/grid.
+  6. Get GO1 and GO2  to perform a basic Navigation and map creation from slam task.
+
+
 ## Week4:
 
-Preliminary Results: </br>
-![GO1 high level control](https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/go1_high_lvl_results.mp4) </br>
-![GO2 high level control](https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/go2_High_lvl_results.mp4) </br>
+#### (a) Accomplishments
+  1. Tested High level control for go1 with humble in jetson. [unitree_nav pkg]
+  2. Tested High level control for go2 with humble docker in laptop. [unitree-ros2-sdk]
 
+#### (b) Preliminary Results: 
+  1. ![GO1 high level control](https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/go1_high_lvl_results.mp4)
+  2. ![GO2 high level control](https://github.com/Sayantani-Bhattacharya/Multi-Hetero-Agent-Exploration-on-UnitreeGOs/blob/main/images/go2_High_lvl_results.mp4)
+
+#### (c) Unresolved Problems:
+  1. Zed-camera self-calibration is failing.
+
+#### (d) Plans: 
+  1. Fix the ZED camera.
+  2. Get GO1 and GO2  to perform a basic Navigation and map creation from slam task.
+  
 ## Week3:
 
 #### (a) Accomplishments
