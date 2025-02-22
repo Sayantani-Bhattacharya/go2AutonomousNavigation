@@ -1,5 +1,4 @@
-build/*
-install/*
-log/*
-vscode/*
+build
+install
+log
 todo.txt
