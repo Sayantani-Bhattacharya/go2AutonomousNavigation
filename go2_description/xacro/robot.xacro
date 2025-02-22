@@ -22,11 +22,11 @@
         <joint name="base_static_joint" type="fixed">
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <parent link="world"/>
-            <child link="base"/>
+            <child link="base_link"/>
         </joint>
     </xacro:if> 
 
-    <link name="base">
+    <link name="base_link">
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
@@ -37,7 +37,7 @@
 
     <joint name="floating_base" type="fixed">
         <origin rpy="0 0 0" xyz="0 0 0"/>
-        <parent link="base"/>
+        <parent link="base_link"/>
         <child link="trunk"/>
     </joint>
 
@@ -63,6 +63,15 @@
                 iyy="${trunk_iyy}" iyz="${trunk_iyz}"
                 izz="${trunk_izz}"/>  
         </inertial>
+    </link>
+
+    <joint name="lidar_joint" type="fixed">
+        <parent link="trunk"/>
+        <child link="utlidar_lidar"/>
+        <origin rpy="0 0 0" xyz="0.32715 -0.00003 -0.04297"/>
+    </joint>
+
+    <link name="utlidar_lidar">
     </link>
 
     <joint name="imu_joint" type="fixed">
