@@ -125,20 +125,40 @@ class Explore : public rclcpp::Node
         mMapResolution = msg.info.resolution;
         mMapOrigin = msg.info.origin;
         mMapLoadTime = msg.info.map_load_time;
-
+        mMapGrid.clear();
         mMapGrid.resize(mMapHeight, std::vector<int>(mMapWidth, 0));
         for (int i = 0; i < mMapHeight; i++)
         {
-          for (int j = 0; j < mMapWidth; j++)
-          {
-            mMapGrid[i][j] = msg.data[i * mMapWidth + j];
-          }
+            for (int j = 0; j < mMapWidth; j++)
+            {
+                int index = j + i * mMapWidth;  
+                if (index >= 0 && index < msg.data.size()) {
+                    mMapGrid[i][j] = msg.data[index];
+                } 
+                else 
+                {
+                    RCLCPP_WARN(this->get_logger(), "Index out of bounds: %d", index);
+                }
+            }
         }
-        RCLCPP_INFO(this->get_logger(), "Map received: shape= %f", mMapGrid.size());
+        RCLCPP_INFO(this->get_logger(), "Map received: width= %f", mMapWidth);
+        RCLCPP_INFO(this->get_logger(), "Map received: height= %f", mMapHeight);
+        RCLCPP_INFO(this->get_logger(), "Map received: resolution= %f", mMapResolution);
+        RCLCPP_INFO(this->get_logger(), "Map received: origin x= %f", mMapOrigin.position.x);
+        RCLCPP_INFO(this->get_logger(), "Map received: origin y= %f", mMapOrigin.position.y);
+        RCLCPP_INFO(this->get_logger(), "Map received: origin z= %f", mMapOrigin.position.z);      
+        RCLCPP_INFO(this->get_logger(), "Map received: shape= %i", mMapGrid.size());
 
-        // self.get_logger().info(f"Map received: shape={self.grid.shape}")
-        // self.get_logger().info(f"Map received: height={self.map_height} widht{self.map_width} resolution={self.map_resolution}")
-        // self.get_logger().info(f"Free cells: {np.sum(self.grid == 0)}, Occupied cells: {np.sum(self.grid == 100)}, Unknown cells: {np.sum(self.grid == -1)}")
+        // Count occurrences
+        int count_1 = 0, count_0 = 0, count_neg1 = 0;
+        for (const auto& row : mMapGrid) {
+            for (int val : row) {
+                if (val == 1) count_1++;
+                else if (val == 0) count_0++;
+                else if (val == -1) count_neg1++;
+            }
+        }
+        RCLCPP_INFO(this->get_logger(), "Occupied cells: %i, Free cells: %i, Unknown cells: %i", count_1, count_0, count_neg1);
 
       }
 
