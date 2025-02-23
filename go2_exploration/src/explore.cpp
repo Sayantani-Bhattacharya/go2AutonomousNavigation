@@ -4,7 +4,7 @@
 // Increase the footprint of the robot in the costmap to avoid collision with the map.: this is done by setting the radius of the robot to 0.3m in the costmap_common_params.yaml file. -----> see
 
 //Services:
-// 1. /explore_explore : Service to start exploring the map.
+// 1. /explore_start : Service to start exploring the map.
 // 2. /explore_stop : Service to stop the robot from exploring the map.
 
 // Subscribers:
@@ -19,6 +19,9 @@
 #include <string>
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "nav_msgs/msg/occupancy_grid.hpp"
+
+// from nav_msgs.msg import OccupancyGrid
 #include "go2_exploration_interfaces/srv/empty.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "tf2/LinearMath/Quaternion.h"
@@ -41,6 +44,7 @@ enum class State
     E_STOP,
 };
 
+using namespace std::chrono_literals;
 
 class Explore : public rclcpp::Node
 {
@@ -48,29 +52,125 @@ class Explore : public rclcpp::Node
      Explore():Node("explore")
      { 
         // Services
-        nav_start_trigger = create_service<go2_exploration_interfaces::srv::Empty>("nav_start_trigger", std::bind(&Explore::nav_start_trigger_callback, this, std::placeholders::_1, std::placeholders::_2));
-        nav_stop_trigger = create_service<go2_exploration_interfaces::srv::Empty>("nav_stop_trigger", std::bind(&Explore::nav_stop_trigger_callback, this, std::placeholders::_1, std::placeholders::_2));        
-     }
+        nav_start_trigger = create_service<go2_exploration_interfaces::srv::Empty>("explore_start", std::bind(&Explore::nav_start_trigger_callback, this, std::placeholders::_1, std::placeholders::_2));
+        nav_stop_trigger = create_service<go2_exploration_interfaces::srv::Empty>("explore_stop", std::bind(&Explore::nav_stop_trigger_callback, this, std::placeholders::_1, std::placeholders::_2));    
+
+        // Subscribers
+        // /goal_reached -- if needed.
+        map_sub = create_subscription<nav_msgs::msg::OccupancyGrid>("/map", 10, std::bind(&Explore::map_sub_callback, this, std::placeholders::_1));
+        
+        // find it from the tf tree: map and base_footprint.
+        curr_pose_sub = create_subscription<geometry_msgs::msg::PoseStamped>("/base_footprint", 10, std::bind(&Explore::curr_pose_sub_callback, this, std::placeholders::_1));  // could use the odom here. | considering base footprint frame is projection on map plane(same z axis).
+
+        // Publishers
+        // goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);  // should be nav pose msg type.
+        goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);  // should be nav pose msg type.
+
+
+        // Type: geometry_msgs/msg/PoseStamped  || /goal_pose
+        // frontier_markers : Publishes the frontier points on the map.
+
+        // Timer
+        mTimer = this->create_wall_timer(100ms, std::bind(&Explore::timer_callback, this));    
+     }     
 
     private:
       rclcpp::TimerBase::SharedPtr mTimer;
       State mRobotState = State::IDLE;
+      geometry_msgs::msg::PoseStamped mCurrPose;
+
+      // Map data
+      nav_msgs::msg::OccupancyGrid mMap;
+      float mMapWidth;
+      float mMapHeight;
+      float mMapResolution;
+      geometry_msgs::msg::Pose mMapOrigin;
+      rclcpp::Time mMapLoadTime;
+      std::vector<std::vector<int>> mMapGrid;
+
+      
       rclcpp::Service<go2_exploration_interfaces::srv::Empty>::SharedPtr nav_start_trigger;
       rclcpp::Service<go2_exploration_interfaces::srv::Empty>::SharedPtr nav_stop_trigger;
+      rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub;
+      rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr curr_pose_sub;
+      rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub;
+
 
       void nav_start_trigger_callback(const std::shared_ptr<go2_exploration_interfaces::srv::Empty::Request> request, std::shared_ptr<go2_exploration_interfaces::srv::Empty::Response> response)
       {
-        RCLCPP_INFO(this->get_logger(), "Inside add service.");
+        RCLCPP_INFO(this->get_logger(), "Starting Exploration.");
         mRobotState = State::START;
         response->r = true;
       } 
 
       void nav_stop_trigger_callback(const std::shared_ptr<go2_exploration_interfaces::srv::Empty::Request> request, std::shared_ptr<go2_exploration_interfaces::srv::Empty::Response> response)
       {
-        RCLCPP_INFO(this->get_logger(), "Inside add service.");
+        RCLCPP_INFO(this->get_logger(), "Stopping Exploration.");
         mRobotState = State::E_STOP;
         response->r = true;
       } 
+
+      void map_sub_callback(const nav_msgs::msg::OccupancyGrid msg)
+      {
+        /*
+        Get the map explored by GO2 and convert it to a grid format 
+        that can be used by the exploration algo.
+        */
+
+        mMap = msg;
+
+        // Map information
+        mMapWidth = msg.info.width;
+        mMapHeight = msg.info.height;
+        mMapResolution = msg.info.resolution;
+        mMapOrigin = msg.info.origin;
+        mMapLoadTime = msg.info.map_load_time;
+
+        mMapGrid.resize(mMapHeight, std::vector<int>(mMapWidth, 0));
+        for (int i = 0; i < mMapHeight; i++)
+        {
+          for (int j = 0; j < mMapWidth; j++)
+          {
+            mMapGrid[i][j] = msg.data[i * mMapWidth + j];
+          }
+        }
+        RCLCPP_INFO(this->get_logger(), "Map received: shape= %f", mMapGrid.size());
+
+        // self.get_logger().info(f"Map received: shape={self.grid.shape}")
+        // self.get_logger().info(f"Map received: height={self.map_height} widht{self.map_width} resolution={self.map_resolution}")
+        // self.get_logger().info(f"Free cells: {np.sum(self.grid == 0)}, Occupied cells: {np.sum(self.grid == 100)}, Unknown cells: {np.sum(self.grid == -1)}")
+
+      }
+
+      void curr_pose_sub_callback(const geometry_msgs::msg::PoseStamped msg)
+      {
+        mCurrPose = msg;
+        RCLCPP_INFO(this->get_logger(), "Current pose received: x= %f, y= %f", msg.pose.position.x, msg.pose.position.y);
+        // RCLCPP_INFO(this->get_logger(), "Current pose received: x=, y=", msg.pose.position.x, msg.pose.position.y);
+      }
+
+      void timer_callback()
+      {
+        if (mRobotState == State::START)
+        {
+          // RCLCPP_INFO(this->get_logger(), "Inside timer, robotsate is {0}.", static_cast<int>(mRobotState)); 
+
+          geometry_msgs::msg::PoseStamped goalMsg;          
+          goalMsg.pose.position.x = 1.0;
+          goalMsg.pose.position.y = 1.0;
+          goalMsg.pose.position.z = 0.0;
+          goalMsg.pose.orientation.x = 0.0;
+          goalMsg.pose.orientation.y = 0.0;
+          goalMsg.pose.orientation.z = 0.0;
+          goalMsg.pose.orientation.w = 1.0;
+          goalMsg.header.frame_id = "map";
+          goalMsg.header.stamp = this->now();        
+          goal_pose_pub->publish(goalMsg);
+        }
+
+        // can check here if the robot has reached the goal pose. can use lookup bet goalpose and current pose. but odnt ahve goalpose tf?
+      }
+      
 
 };
 
