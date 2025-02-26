@@ -10,6 +10,10 @@
 // Subscribers:
 // 1. /map : Subscribes to the map data.
 // 2. /goal_reached : Subscribes to the goal pose for the robot to move to.
+// 3. lookup transform
+
+// Algorithm:
+// seach frontiers, find the nearest frontier, publish the goal pose, move to the goal pose, repeat.
 
 // Publishers:
 // frontier_markers : Publishes the frontier points on the map.
@@ -30,6 +34,12 @@
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "unitree_go2_nav_interfaces/msg/nav_to_pose.hpp"
 #include "go2_exploration_interfaces/srv/empty.hpp"
+
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/twist.hpp"
+#include "tf2/exceptions.h"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
 
 // State machine
 enum class State
@@ -58,16 +68,19 @@ class Explore : public rclcpp::Node
         // Subscribers
         // /goal_reached -- if needed.
         map_sub = create_subscription<nav_msgs::msg::OccupancyGrid>("/map", 10, std::bind(&Explore::map_sub_callback, this, std::placeholders::_1));
+
         
-        // find it from the tf tree: map and base_footprint.
-        curr_pose_sub = create_subscription<geometry_msgs::msg::PoseStamped>("/base_footprint", 10, std::bind(&Explore::curr_pose_sub_callback, this, std::placeholders::_1));  // could use the odom here. | considering base footprint frame is projection on map plane(same z axis).
+        // Transform listener
+        // TODO: change odom to base_footprint later !!. 
+        target_frame_ = this->declare_parameter<std::string>("odom", "base_link");
+        tf_buffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+        tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
+        // Considering base footprint frame is projection on map plane(same z axis).
 
         // Publishers
-        // goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);  // should be nav pose msg type.
-        goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);  // should be nav pose msg type.
+        goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);  
 
 
-        // Type: geometry_msgs/msg/PoseStamped  || /goal_pose
         // frontier_markers : Publishes the frontier points on the map.
 
         // Timer
@@ -88,7 +101,12 @@ class Explore : public rclcpp::Node
       rclcpp::Time mMapLoadTime;
       std::vector<std::vector<int>> mMapGrid;
 
-      
+      // TF
+      std::shared_ptr<tf2_ros::TransformListener> tf_listener{nullptr};
+      std::unique_ptr<tf2_ros::Buffer> tf_buffer;
+      std::string target_frame_;    
+
+    
       rclcpp::Service<go2_exploration_interfaces::srv::Empty>::SharedPtr nav_start_trigger;
       rclcpp::Service<go2_exploration_interfaces::srv::Empty>::SharedPtr nav_stop_trigger;
       rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub;
@@ -171,6 +189,33 @@ class Explore : public rclcpp::Node
 
       void timer_callback()
       {
+
+        // Store frame names in variables that will be used to compute transformations.
+
+        std::string fromFrameRel = target_frame_.c_str();
+        std::string toFrameRel = "map";
+        // Lookup transform
+        geometry_msgs::msg::TransformStamped t;
+
+        // Look up for the transformation between target_frame and turtle2 frames
+        // and send velocity commands for turtle2 to reach target_frame
+        try {
+          t = tf_buffer->lookupTransform(
+            toFrameRel, fromFrameRel,
+            tf2::TimePointZero);
+        } catch (const tf2::TransformException & ex) {
+          RCLCPP_INFO(
+            this->get_logger(), "Could not transform %s to %s: %s", toFrameRel.c_str(), fromFrameRel.c_str(), ex.what());
+          return;
+        }
+
+        float x = t.transform.translation.x;
+        float y = t.transform.translation.y;
+        float z = t.transform.translation.z;
+        RCLCPP_INFO(this->get_logger(), "Transform btw odom and map: x= %f, y= %f, z= %f", x, y, z);
+
+
+
         if (mRobotState == State::START)
         {
           // RCLCPP_INFO(this->get_logger(), "Inside timer, robotsate is {0}.", static_cast<int>(mRobotState)); 
