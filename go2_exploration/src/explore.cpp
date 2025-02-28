@@ -3,7 +3,7 @@
 // The robot will stop exploring when the map is fully explored or with a user service call.
 // Increase the footprint of the robot in the costmap to avoid collision with the map.: this is done by setting the radius of the robot to 0.3m in the costmap_common_params.yaml file. -----> see
 
-//Services:
+// Services:
 // 1. /explore_start : Service to start exploring the map.
 // 2. /explore_stop : Service to stop the robot from exploring the map.
 
@@ -21,9 +21,12 @@
 #include <exception>
 #include <vector>
 #include <string>
+#include <cmath>
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
+#include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 // from nav_msgs.msg import OccupancyGrid
 #include "go2_exploration_interfaces/srv/empty.hpp"
@@ -49,7 +52,6 @@ enum class State
     // AUTO_NAV_MODE,
     START,
     MOVING,
-    WAIT_FOR_MOVEMENT_COMPLETE,
     REACHED_GOAL,
     E_STOP,
 };
@@ -68,20 +70,16 @@ class Explore : public rclcpp::Node
         // Subscribers
         // /goal_reached -- if needed.
         map_sub = create_subscription<nav_msgs::msg::OccupancyGrid>("/map", 10, std::bind(&Explore::map_sub_callback, this, std::placeholders::_1));
-
         
         // Transform listener
-        // TODO: change odom to base_footprint later !!. 
-        target_frame_ = this->declare_parameter<std::string>("odom", "base_link");
         tf_buffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
-        // Considering base footprint frame is projection on map plane(same z axis).
 
         // Publishers
-        goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);  
-
-
+        goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10); 
+        frontier_marker_pub = create_publisher<visualization_msgs::msg::MarkerArray>("/frontier_markers", 10); 
         // frontier_markers : Publishes the frontier points on the map.
+        // Marker for current goal pose.
 
         // Timer
         mTimer = this->create_wall_timer(100ms, std::bind(&Explore::timer_callback, this));    
@@ -90,7 +88,10 @@ class Explore : public rclcpp::Node
     private:
       rclcpp::TimerBase::SharedPtr mTimer;
       State mRobotState = State::IDLE;
-      geometry_msgs::msg::PoseStamped mCurrPose;
+      float mDiagonalTollerance = 0.1;
+      std::pair<int,int> mCurrGoalPose = {-1, -1};
+      std::vector<std::pair<int, int>> mFrontiers;
+
 
       // Map data
       nav_msgs::msg::OccupancyGrid mMap;
@@ -104,20 +105,28 @@ class Explore : public rclcpp::Node
       // TF
       std::shared_ptr<tf2_ros::TransformListener> tf_listener{nullptr};
       std::unique_ptr<tf2_ros::Buffer> tf_buffer;
-      std::string target_frame_;    
-
+      std::string target_frame_;
+      std::vector<float> mCurrPose_wrt_map = {0, 0, 0}; // x, y, z
     
       rclcpp::Service<go2_exploration_interfaces::srv::Empty>::SharedPtr nav_start_trigger;
       rclcpp::Service<go2_exploration_interfaces::srv::Empty>::SharedPtr nav_stop_trigger;
       rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub;
       rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr curr_pose_sub;
       rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub;
+      rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr frontier_marker_pub;
 
 
       void nav_start_trigger_callback(const std::shared_ptr<go2_exploration_interfaces::srv::Empty::Request> request, std::shared_ptr<go2_exploration_interfaces::srv::Empty::Response> response)
       {
-        RCLCPP_INFO(this->get_logger(), "Starting Exploration.");
-        mRobotState = State::START;
+        if(mRobotState == State::START)
+        {
+          RCLCPP_INFO(this->get_logger(), "Already exploring.");
+        }
+        else
+        {
+          RCLCPP_INFO(this->get_logger(), "Starting Exploration.");
+          mRobotState = State::START;
+        }
         response->r = true;
       } 
 
@@ -159,13 +168,13 @@ class Explore : public rclcpp::Node
                 }
             }
         }
-        RCLCPP_INFO(this->get_logger(), "Map received: width= %f", mMapWidth);
-        RCLCPP_INFO(this->get_logger(), "Map received: height= %f", mMapHeight);
-        RCLCPP_INFO(this->get_logger(), "Map received: resolution= %f", mMapResolution);
-        RCLCPP_INFO(this->get_logger(), "Map received: origin x= %f", mMapOrigin.position.x);
-        RCLCPP_INFO(this->get_logger(), "Map received: origin y= %f", mMapOrigin.position.y);
-        RCLCPP_INFO(this->get_logger(), "Map received: origin z= %f", mMapOrigin.position.z);      
-        RCLCPP_INFO(this->get_logger(), "Map received: shape= %i", mMapGrid.size());
+        // RCLCPP_INFO(this->get_logger(), "Map received: width= %f", mMapWidth);
+        // RCLCPP_INFO(this->get_logger(), "Map received: height= %f", mMapHeight);
+        // RCLCPP_INFO(this->get_logger(), "Map received: resolution= %f", mMapResolution);
+        // RCLCPP_INFO(this->get_logger(), "Map received: origin x= %f", mMapOrigin.position.x);
+        // RCLCPP_INFO(this->get_logger(), "Map received: origin y= %f", mMapOrigin.position.y);
+        // RCLCPP_INFO(this->get_logger(), "Map received: origin z= %f", mMapOrigin.position.z);      
+        // RCLCPP_INFO(this->get_logger(), "Map received: shape= %i", mMapGrid.size());
 
         // Count occurrences
         int count_1 = 0, count_0 = 0, count_neg1 = 0;
@@ -177,66 +186,201 @@ class Explore : public rclcpp::Node
             }
         }
         RCLCPP_INFO(this->get_logger(), "Occupied cells: %i, Free cells: %i, Unknown cells: %i", count_1, count_0, count_neg1);
+        detect_frontiers();
 
       }
 
-      void curr_pose_sub_callback(const geometry_msgs::msg::PoseStamped msg)
+      // void curr_pose_sub_callback(const geometry_msgs::msg::PoseStamped msg)
+      // {
+      //   mCurrPose = msg;
+      //   RCLCPP_INFO(this->get_logger(), "Current pose received: x= %f, y= %f", msg.pose.position.x, msg.pose.position.y);
+      // }
+
+      void publish_markers(std::vector<std::pair<int, int>> frontiers)
       {
-        mCurrPose = msg;
-        RCLCPP_INFO(this->get_logger(), "Current pose received: x= %f, y= %f", msg.pose.position.x, msg.pose.position.y);
-        // RCLCPP_INFO(this->get_logger(), "Current pose received: x=, y=", msg.pose.position.x, msg.pose.position.y);
+        //std::vector<std::pair<int, int>> frontiers
+        visualization_msgs::msg::MarkerArray markerArray; 
+        int id = 0;
+        for (const auto& [fx,fy]: frontiers)
+        {
+          visualization_msgs::msg::Marker marker;
+          marker.header.frame_id = "map";
+          marker.header.stamp = rclcpp::Clock().now();
+          marker.ns = "basic_shapes";
+          marker.id = id;
+
+          marker.type = visualization_msgs::msg::Marker::ARROW;
+          marker.action = visualization_msgs::msg::Marker::ADD;
+
+          marker.pose.position.x = fx;
+          marker.pose.position.y = fy;
+          marker.pose.orientation.z = std::cos(fy / 2);
+          marker.pose.orientation.w = std::sin(fy/ 2);
+          // Arrow dimention
+          marker.scale.x = 0.5;
+          marker.scale.y = 0.1;
+          marker.scale.z = 0.1;
+
+          marker.color.r = 0.0;
+          marker.color.g = 1.0;
+          marker.color.b = 0.0;
+          marker.color.a = 1.0;   // Don't forget to set the alpha!
+          markerArray.markers.push_back(marker);
+          id++;
+        }
+
+        // only if using a MESH_RESOURCE marker type:
+        // marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
+        // marker.lifetime = rclcpp::Duration::from_nanoseconds(1000);
+        frontier_marker_pub->publish(markerArray);
+
       }
 
-      void timer_callback()
+      std::vector<std::pair<int, int>> detect_frontiers()
       {
+        /*
+        Occupancy grid is used to detect all the possible frontiers in the current map.
 
-        // Store frame names in variables that will be used to compute transformations.
+        Occupancy Grids:
+            # open: having an occupancy probability < prior probability       ----> 0
+            # unknown: having an occupancy probability = prior probability    ----> -1
+            # occupied: having an occupancy probability > prior probability   ----> 100
+        */
+        // logic to find frontiers.
+        std::vector<std::pair<int, int>> frontiers;
+        for (int r = 0; r < mMapHeight; ++r) {
+            for (int c = 0; c < mMapWidth; ++c) {
+                // Check if the current cell is free space
+                if (mMapGrid[r][c] == 0) {
+                    // Check if it is adjacent to at least one unknown cell
+                    for (const auto& [dr, dc] : std::vector<std::pair<int, int>>{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) 
+                    {
+                        int nr = r + dr, nc = c + dc; // Neighbour coordinates
+                        if (nr >= 0 && nr < mMapHeight && nc >= 0 && nc < mMapWidth) { // Check bounds
+                            if (mMapGrid[nr][nc] == -1) {
+                                // Add the current cell as a frontier
+                                frontiers.emplace_back(r, c);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // publish frontiers markers.
+        publish_markers(frontiers);
+        mFrontiers = frontiers;
+        return frontiers;        
+      }
 
-        std::string fromFrameRel = target_frame_.c_str();
-        std::string toFrameRel = "map";
-        // Lookup transform
+      std::pair<int,int> explore()
+      {
+        // Todo: add direction (yaw) calculation.
+        // std::vector<std::pair<int, int>> frontiers;
+        auto frontiers = detect_frontiers();
+        // find the Nearest frontier.
+        if (frontiers.empty()) 
+        {
+          RCLCPP_INFO(this->get_logger(), "[Explore] No frontiers left.");
+          mRobotState = State::IDLE;
+          return {-1, -1}; // Return an invalid position if there are no frontiers
+        }
+        std::pair<int, int> nearest_frontier;
+        double min_distance = std::numeric_limits<double>::max();
+
+        for (const auto& [fx, fy] : frontiers) {
+            double distance = std::hypot(fx - mCurrPose_wrt_map[0], fy - mCurrPose_wrt_map[1]); 
+            if (distance < min_distance) {
+                min_distance = distance;
+                nearest_frontier = {fx, fy};
+            }
+        }
+        // Todo: maybe choose second nearest kuch if this too close(less than diagonal tollerance)
+        return nearest_frontier;
+        // return the goal pose.
+      }
+
+      void lookup_transform()
+      {
+        
         geometry_msgs::msg::TransformStamped t;
+        if (!tf_buffer) 
+        {
+            RCLCPP_WARN(this->get_logger(), "tf_buffer is not initialized!");
+            return;
+        }
 
-        // Look up for the transformation between target_frame and turtle2 frames
-        // and send velocity commands for turtle2 to reach target_frame
+        if (!tf_buffer->canTransform("odom", "base_footprint", tf2::TimePointZero, 3s)) 
+        {
+            RCLCPP_WARN(this->get_logger(), "Transform not available yet.");
+            return;
+        }
+
         try {
-          t = tf_buffer->lookupTransform(
-            toFrameRel, fromFrameRel,
-            tf2::TimePointZero);
-        } catch (const tf2::TransformException & ex) {
+          t = tf_buffer->lookupTransform("odom", "base_footprint", tf2::TimePointZero, 3s);
+        } 
+        catch (const tf2::TransformException & ex) {
           RCLCPP_INFO(
-            this->get_logger(), "Could not transform %s to %s: %s", toFrameRel.c_str(), fromFrameRel.c_str(), ex.what());
+            this->get_logger(), "Could not transform %s to %s: %s hi", "toFrameRel.c_str()", "fromFrameRel.c_str()", ex.what());
           return;
         }
 
         float x = t.transform.translation.x;
         float y = t.transform.translation.y;
         float z = t.transform.translation.z;
-        RCLCPP_INFO(this->get_logger(), "Transform btw odom and map: x= %f, y= %f, z= %f", x, y, z);
-
-
-
-        if (mRobotState == State::START)
-        {
-          // RCLCPP_INFO(this->get_logger(), "Inside timer, robotsate is {0}.", static_cast<int>(mRobotState)); 
-
-          geometry_msgs::msg::PoseStamped goalMsg;          
-          goalMsg.pose.position.x = 1.0;
-          goalMsg.pose.position.y = 1.0;
-          goalMsg.pose.position.z = 0.0;
-          goalMsg.pose.orientation.x = 0.0;
-          goalMsg.pose.orientation.y = 0.0;
-          goalMsg.pose.orientation.z = 0.0;
-          goalMsg.pose.orientation.w = 1.0;
-          goalMsg.header.frame_id = "map";
-          goalMsg.header.stamp = this->now();        
-          goal_pose_pub->publish(goalMsg);
-        }
-
-        // can check here if the robot has reached the goal pose. can use lookup bet goalpose and current pose. but odnt ahve goalpose tf?
+        RCLCPP_INFO(this->get_logger(), "Transform btw %s and %s: x= %f, y= %f, z= %f","base_footprint", "map", x, y, z);
+        mCurrPose_wrt_map = {x, y, z};          
       }
-      
 
+      void publish_goal(std::pair<int, int> goalPose)
+      {
+        geometry_msgs::msg::PoseStamped goalMsg;          
+        goalMsg.pose.position.x = goalPose.first;
+        goalMsg.pose.position.y = goalPose.second;
+        // goalMsg.pose.orientation.w = 0;
+        goalMsg.header.frame_id = "map";
+        goalMsg.header.stamp = this->now();        
+        goal_pose_pub->publish(goalMsg);
+        RCLCPP_INFO(this->get_logger(), "[Explore] Goal pose published: x= %f, y= %f", goalMsg.pose.position.x, goalMsg.pose.position.y);
+        RCLCPP_INFO(this->get_logger(), "[Explore] Robot state moving.");
+      }
+
+      void timer_callback()
+      {
+        lookup_transform();
+        if (!mFrontiers.empty())
+        {
+          publish_markers(mFrontiers);          
+        }
+        if (mRobotState != State::E_STOP)
+        {  
+          RCLCPP_INFO(this->get_logger(), "[Explore] Robot not in E-stop.");
+
+          if (mRobotState == State::START)
+          {
+            RCLCPP_INFO(this->get_logger(), "[Explore] Robot Started.");
+            mCurrGoalPose = explore(); 
+            publish_goal(mCurrGoalPose);         
+            mRobotState = State::MOVING;
+          }
+          if ( std::hypot(mCurrGoalPose.first - mCurrPose_wrt_map[0], mCurrGoalPose.second - mCurrPose_wrt_map[1]) < mDiagonalTollerance)
+          {
+            RCLCPP_INFO(this->get_logger(), "[Explore] Goal reached.");
+            mRobotState = State::REACHED_GOAL;
+          }
+          if (mRobotState == State::REACHED_GOAL)
+          {
+            RCLCPP_INFO(this->get_logger(), "[Explore] Robot state idle.");
+            mCurrGoalPose = explore(); 
+            publish_goal(mCurrGoalPose); 
+            mRobotState = State::MOVING;
+          }
+        }
+        else
+        {
+          RCLCPP_INFO(this->get_logger(), "[Explore] Robot is in Emergency Stop.");
+        }
+      }
 };
 
 int main(int argc, char ** argv)

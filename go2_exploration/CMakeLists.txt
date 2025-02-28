@@ -18,11 +18,12 @@ find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(go2_exploration_interfaces REQUIRED)
 find_package(unitree_go2_nav_interfaces REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 
 add_executable(go2Exploration src/explore.cpp)
 ament_target_dependencies(go2Exploration
-  rclcpp rclcpp_action std_srvs geometry_msgs tf2 tf2_geometry_msgs nav2_msgs sensor_msgs nav_msgs unitree_go2_nav_interfaces go2_exploration_interfaces
+  rclcpp rclcpp_action std_srvs geometry_msgs tf2 tf2_geometry_msgs nav2_msgs sensor_msgs nav_msgs unitree_go2_nav_interfaces go2_exploration_interfaces visualization_msgs
 )
 
 install(TARGETS
