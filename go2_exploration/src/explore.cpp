@@ -145,6 +145,7 @@ class Explore : public rclcpp::Node
         */
 
         mMap = msg;
+        std::set<int> unique_values;
 
         // Map information
         mMapWidth = msg.info.width;
@@ -161,6 +162,7 @@ class Explore : public rclcpp::Node
                 int index = j + i * mMapWidth;  
                 if (index >= 0 && index < msg.data.size()) {
                     mMapGrid[i][j] = msg.data[index];
+                    unique_values.insert(msg.data[index]);
                 } 
                 else 
                 {
@@ -177,17 +179,27 @@ class Explore : public rclcpp::Node
         // RCLCPP_INFO(this->get_logger(), "Map received: shape= %i", mMapGrid.size());
 
         // Count occurrences
-        int count_1 = 0, count_0 = 0, count_neg1 = 0;
+        int count_100 = 0, count_0 = 0, count_neg1 = 0;
         for (const auto& row : mMapGrid) {
             for (int val : row) {
-                if (val == 1) count_1++;
-                else if (val == 0) count_0++;
+                if (val == 100) count_100++;
+                // else if (val == 0) count_0++;
+                else if (val >= 0 && val < 100) count_0++;  // Adjust threshold if necessary
                 else if (val == -1) count_neg1++;
+                else RCLCPP_WARN(this->get_logger(), "Unexpected map value: %d", val);
             }
         }
-        RCLCPP_INFO(this->get_logger(), "Occupied cells: %i, Free cells: %i, Unknown cells: %i", count_1, count_0, count_neg1);
-        detect_frontiers();
+        RCLCPP_INFO(this->get_logger(), "Occupied cells: %i, Free cells: %i, Unknown cells: %i", count_100, count_0, count_neg1);
 
+        // Printing unique vals:
+        std::string unique_vals_str;
+        for (int val : unique_values) 
+        {
+            unique_vals_str += std::to_string(val) + " ";
+        }
+        RCLCPP_INFO(this->get_logger(), "Unique values in map: %s", unique_vals_str.c_str());
+
+        detect_frontiers();
       }
 
       // void curr_pose_sub_callback(const geometry_msgs::msg::PoseStamped msg)
@@ -199,6 +211,11 @@ class Explore : public rclcpp::Node
       void publish_markers(std::vector<std::pair<int, int>> frontiers)
       {
         //std::vector<std::pair<int, int>> frontiers
+        if (frontiers.empty())
+        {
+          RCLCPP_INFO(this->get_logger(), "No frontiers to publish.");
+          return;
+        }
         visualization_msgs::msg::MarkerArray markerArray; 
         int id = 0;
         for (const auto& [fx,fy]: frontiers)
@@ -212,14 +229,14 @@ class Explore : public rclcpp::Node
           marker.type = visualization_msgs::msg::Marker::ARROW;
           marker.action = visualization_msgs::msg::Marker::ADD;
 
-          marker.pose.position.x = fx;
-          marker.pose.position.y = fy;
+          marker.pose.position.x = fx*mMapResolution;
+          marker.pose.position.y = fy*mMapResolution;
           marker.pose.orientation.z = std::cos(fy / 2);
           marker.pose.orientation.w = std::sin(fy/ 2);
           // Arrow dimention
           marker.scale.x = 0.5;
-          marker.scale.y = 0.1;
-          marker.scale.z = 0.1;
+          marker.scale.y = 0.01;
+          marker.scale.z = 0.01;
 
           marker.color.r = 0.0;
           marker.color.g = 1.0;
@@ -233,33 +250,42 @@ class Explore : public rclcpp::Node
         // marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
         // marker.lifetime = rclcpp::Duration::from_nanoseconds(1000);
         frontier_marker_pub->publish(markerArray);
-
+        return;
       }
 
       std::vector<std::pair<int, int>> detect_frontiers()
       {
         /*
         Occupancy grid is used to detect all the possible frontiers in the current map.
-
         Occupancy Grids:
             # open: having an occupancy probability < prior probability       ----> 0
             # unknown: having an occupancy probability = prior probability    ----> -1
             # occupied: having an occupancy probability > prior probability   ----> 100
         */
-        // logic to find frontiers.
         std::vector<std::pair<int, int>> frontiers;
+        RCLCPP_INFO(this->get_logger(), "Map received: width= %f", mMapWidth);
+        RCLCPP_INFO(this->get_logger(), "Map received: height= %f", mMapHeight);
+        RCLCPP_INFO(this->get_logger(), "[Explore] Detecting frontier.");
+
         for (int r = 0; r < mMapHeight; ++r) {
+            RCLCPP_INFO(this->get_logger(), "[Explore] front here ");
             for (int c = 0; c < mMapWidth; ++c) {
-                // Check if the current cell is free space
-                if (mMapGrid[r][c] == 0) {
+                // Check if the current cell is free space : changed the logic to current cell being not occupied. !!!!!!!!!!!!!!
+                RCLCPP_INFO(this->get_logger(), "[Explore] front 1 %d and % d.", r, c);
+                if (mMapGrid[r][c] != 100) {
+                    RCLCPP_INFO(this->get_logger(), "[Explore] front 1 %d and % d.", r, c);
                     // Check if it is adjacent to at least one unknown cell
                     for (const auto& [dr, dc] : std::vector<std::pair<int, int>>{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) 
                     {
                         int nr = r + dr, nc = c + dc; // Neighbour coordinates
+                        RCLCPP_INFO(this->get_logger(), "[Explore] front 2 %d and % d.", dr, dc);
                         if (nr >= 0 && nr < mMapHeight && nc >= 0 && nc < mMapWidth) { // Check bounds
+                            // if the neighbour cell is unknown.
+                            RCLCPP_INFO(this->get_logger(), "[Explore] front 3 %d and % d.", nr, nc);
                             if (mMapGrid[nr][nc] == -1) {
                                 // Add the current cell as a frontier
                                 frontiers.emplace_back(r, c);
+                                RCLCPP_INFO(this->get_logger(), "[Explore] Added a frontier.");
                                 break;
                             }
                         }
@@ -268,8 +294,9 @@ class Explore : public rclcpp::Node
             }
         }
         // publish frontiers markers.
-        publish_markers(frontiers);
+        // publish_markers(frontiers);
         mFrontiers = frontiers;
+        RCLCPP_INFO(this->get_logger(), "[Explore] Detection algo ended.");
         return frontiers;        
       }
 
@@ -328,7 +355,7 @@ class Explore : public rclcpp::Node
         float x = t.transform.translation.x;
         float y = t.transform.translation.y;
         float z = t.transform.translation.z;
-        RCLCPP_INFO(this->get_logger(), "Transform btw %s and %s: x= %f, y= %f, z= %f","base_footprint", "map", x, y, z);
+        // RCLCPP_INFO(this->get_logger(), "Transform btw %s and %s: x= %f, y= %f, z= %f","base_footprint", "map", x, y, z);
         mCurrPose_wrt_map = {x, y, z};          
       }
 
@@ -354,7 +381,7 @@ class Explore : public rclcpp::Node
         }
         if (mRobotState != State::E_STOP)
         {  
-          RCLCPP_INFO(this->get_logger(), "[Explore] Robot not in E-stop.");
+          // RCLCPP_INFO(this->get_logger(), "[Explore] Robot not in E-stop.");
 
           if (mRobotState == State::START)
           {
