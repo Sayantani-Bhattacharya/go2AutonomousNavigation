@@ -392,7 +392,7 @@ class Explore : public rclcpp::Node
         goalMsg.pose.position.x = goalPose.first;
         goalMsg.pose.position.y = goalPose.second;
         // goalMsg.pose.orientation.w = 0;
-        goalMsg.header.frame_id = "map";
+        goalMsg.header.frame_id = "base_link";  // map
         goalMsg.header.stamp = this->now();        
         goal_pose_pub->publish(goalMsg);
         RCLCPP_INFO(this->get_logger(), "[Explore] Goal pose published: x= %f, y= %f", goalMsg.pose.position.x, goalMsg.pose.position.y);
