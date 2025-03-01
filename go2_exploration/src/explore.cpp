@@ -78,8 +78,7 @@ class Explore : public rclcpp::Node
         // Publishers
         goal_pose_pub = create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10); 
         frontier_marker_pub = create_publisher<visualization_msgs::msg::MarkerArray>("/frontier_markers", 10); 
-        // frontier_markers : Publishes the frontier points on the map.
-        // Marker for current goal pose.
+        goal_marker_pub = create_publisher<visualization_msgs::msg::Marker>("/goal_marker", 10);
 
         // Timer
         mTimer = this->create_wall_timer(100ms, std::bind(&Explore::timer_callback, this));    
@@ -89,8 +88,9 @@ class Explore : public rclcpp::Node
       rclcpp::TimerBase::SharedPtr mTimer;
       State mRobotState = State::IDLE;
       float mDiagonalTollerance = 0.1;
-      std::pair<int,int> mCurrGoalPose = {-1, -1};
+      std::pair<int,int> mCurrGoalPose = {-100, -100};
       std::vector<std::pair<int, int>> mFrontiers;
+      int mMinExploreDistance = 1;
 
 
       // Map data
@@ -114,6 +114,7 @@ class Explore : public rclcpp::Node
       rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr curr_pose_sub;
       rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub;
       rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr frontier_marker_pub;
+      rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub;
 
 
       void nav_start_trigger_callback(const std::shared_ptr<go2_exploration_interfaces::srv::Empty::Request> request, std::shared_ptr<go2_exploration_interfaces::srv::Empty::Response> response)
@@ -197,7 +198,7 @@ class Explore : public rclcpp::Node
         {
             unique_vals_str += std::to_string(val) + " ";
         }
-        RCLCPP_INFO(this->get_logger(), "Unique values in map: %s", unique_vals_str.c_str());
+        // RCLCPP_INFO(this->get_logger(), "Unique values in map: %s", unique_vals_str.c_str());
 
         detect_frontiers();
       }
@@ -208,7 +209,7 @@ class Explore : public rclcpp::Node
       //   RCLCPP_INFO(this->get_logger(), "Current pose received: x= %f, y= %f", msg.pose.position.x, msg.pose.position.y);
       // }
 
-      void publish_markers(std::vector<std::pair<int, int>> frontiers)
+      void publish_frontier_markers(std::vector<std::pair<int, int>> frontiers)
       {
         //std::vector<std::pair<int, int>> frontiers
         if (frontiers.empty())
@@ -253,6 +254,40 @@ class Explore : public rclcpp::Node
         return;
       }
 
+      void publish_goal_marker(std::pair<int, int> goalPose)
+      {
+        // have a default wierd value.
+        // if (goalPose.first.empty() || goalPose.second.empty())
+        // {
+        //   RCLCPP_INFO(this->get_logger(), "Goal Pose not exist.");
+        //   return;
+        // }        
+        visualization_msgs::msg::Marker marker; 
+        marker.header.frame_id = "map";
+        marker.header.stamp = rclcpp::Clock().now();
+        marker.ns = "basic_shapes";
+        marker.id = 0;
+
+        marker.type = visualization_msgs::msg::Marker::ARROW;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+
+        marker.pose.position.x = goalPose.first*mMapResolution;
+        marker.pose.position.y = goalPose.second*mMapResolution;
+        marker.pose.orientation.z = std::cos(goalPose.second/ 2);
+        marker.pose.orientation.w = std::sin(goalPose.second/ 2);
+        // Arrow dimention
+        marker.scale.x = 0.45;
+        marker.scale.y = 0.01;
+        marker.scale.z = 0.01;
+
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.color.b = 0.0;
+        marker.color.a = 1.0;   // Don't forget to set the alpha!
+        goal_marker_pub->publish(marker);
+        return;
+      }
+
       std::vector<std::pair<int, int>> detect_frontiers()
       {
         /*
@@ -263,29 +298,23 @@ class Explore : public rclcpp::Node
             # occupied: having an occupancy probability > prior probability   ----> 100
         */
         std::vector<std::pair<int, int>> frontiers;
-        RCLCPP_INFO(this->get_logger(), "Map received: width= %f", mMapWidth);
-        RCLCPP_INFO(this->get_logger(), "Map received: height= %f", mMapHeight);
+        // RCLCPP_INFO(this->get_logger(), "Map received: width= %f", mMapWidth);
+        // RCLCPP_INFO(this->get_logger(), "Map received: height= %f", mMapHeight);
         RCLCPP_INFO(this->get_logger(), "[Explore] Detecting frontier.");
 
         for (int r = 0; r < mMapHeight; ++r) {
-            RCLCPP_INFO(this->get_logger(), "[Explore] front here ");
             for (int c = 0; c < mMapWidth; ++c) {
                 // Check if the current cell is free space : changed the logic to current cell being not occupied. !!!!!!!!!!!!!!
-                RCLCPP_INFO(this->get_logger(), "[Explore] front 1 %d and % d.", r, c);
                 if (mMapGrid[r][c] != 100) {
-                    RCLCPP_INFO(this->get_logger(), "[Explore] front 1 %d and % d.", r, c);
                     // Check if it is adjacent to at least one unknown cell
                     for (const auto& [dr, dc] : std::vector<std::pair<int, int>>{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) 
                     {
                         int nr = r + dr, nc = c + dc; // Neighbour coordinates
-                        RCLCPP_INFO(this->get_logger(), "[Explore] front 2 %d and % d.", dr, dc);
                         if (nr >= 0 && nr < mMapHeight && nc >= 0 && nc < mMapWidth) { // Check bounds
                             // if the neighbour cell is unknown.
-                            RCLCPP_INFO(this->get_logger(), "[Explore] front 3 %d and % d.", nr, nc);
                             if (mMapGrid[nr][nc] == -1) {
                                 // Add the current cell as a frontier
                                 frontiers.emplace_back(r, c);
-                                RCLCPP_INFO(this->get_logger(), "[Explore] Added a frontier.");
                                 break;
                             }
                         }
@@ -293,21 +322,20 @@ class Explore : public rclcpp::Node
                 }
             }
         }
-        // publish frontiers markers.
-        // publish_markers(frontiers);
         mFrontiers = frontiers;
         RCLCPP_INFO(this->get_logger(), "[Explore] Detection algo ended.");
+        RCLCPP_INFO(this->get_logger(), "[Explore] Frontiers detected: %i", frontiers.size());
         return frontiers;        
       }
 
       std::pair<int,int> explore()
       {
         // Todo: add direction (yaw) calculation.
-        // std::vector<std::pair<int, int>> frontiers;
         auto frontiers = detect_frontiers();
-        // find the Nearest frontier.
+        // Find the Nearest frontier above the mMinExploreDistance.
         if (frontiers.empty()) 
         {
+          RCLCPP_INFO(this->get_logger(), "[Explore] Frontiers detected: %i", mFrontiers.size());
           RCLCPP_INFO(this->get_logger(), "[Explore] No frontiers left.");
           mRobotState = State::IDLE;
           return {-1, -1}; // Return an invalid position if there are no frontiers
@@ -317,14 +345,13 @@ class Explore : public rclcpp::Node
 
         for (const auto& [fx, fy] : frontiers) {
             double distance = std::hypot(fx - mCurrPose_wrt_map[0], fy - mCurrPose_wrt_map[1]); 
+            if (distance < mMinExploreDistance) continue;
             if (distance < min_distance) {
                 min_distance = distance;
                 nearest_frontier = {fx, fy};
             }
         }
-        // Todo: maybe choose second nearest kuch if this too close(less than diagonal tollerance)
         return nearest_frontier;
-        // return the goal pose.
       }
 
       void lookup_transform()
@@ -377,17 +404,17 @@ class Explore : public rclcpp::Node
         lookup_transform();
         if (!mFrontiers.empty())
         {
-          publish_markers(mFrontiers);          
+          publish_frontier_markers(mFrontiers);          
         }
+        publish_goal_marker(mCurrGoalPose);        
         if (mRobotState != State::E_STOP)
         {  
           // RCLCPP_INFO(this->get_logger(), "[Explore] Robot not in E-stop.");
-
           if (mRobotState == State::START)
           {
             RCLCPP_INFO(this->get_logger(), "[Explore] Robot Started.");
             mCurrGoalPose = explore(); 
-            publish_goal(mCurrGoalPose);         
+            // publish_goal(mCurrGoalPose);         
             mRobotState = State::MOVING;
           }
           if ( std::hypot(mCurrGoalPose.first - mCurrPose_wrt_map[0], mCurrGoalPose.second - mCurrPose_wrt_map[1]) < mDiagonalTollerance)
@@ -399,9 +426,10 @@ class Explore : public rclcpp::Node
           {
             RCLCPP_INFO(this->get_logger(), "[Explore] Robot state idle.");
             mCurrGoalPose = explore(); 
-            publish_goal(mCurrGoalPose); 
+            // publish_goal(mCurrGoalPose); 
             mRobotState = State::MOVING;
           }
+          publish_goal(mCurrGoalPose); 
         }
         else
         {
