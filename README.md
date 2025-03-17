@@ -6,8 +6,11 @@ Author: Sayantani Bhattacharya
 
 Navigating complex and dangerous terrains autonomously, this system equips the Unitree GO2 quadruped with advanced exploration capabilities. Designed for unstructured environments, it integrates real-time localization, mapping, and intelligent navigation to move efficiently through forests, rubble, or unknown spaces. The robot autonomously detects frontiers, selects optimal paths, and avoids obstacles, ensuring safe and effective traversal. With a state-machine-driven approach and real-time sensor feedback, it dynamically adapts to its surroundings, making decisions on the fly. Whether mapping unknown areas or assisting in hazardous missions, this system pushes the boundaries of quadrupedal autonomy, bridging the gap between robotic perception and intelligent motion.
 
+<p align="center">
+  <img src="/images/go2Outside.gif" alt="Alt text" width="800"/>
+</p>
 
-## Block diagram
+## Block Diagram
 
 <p align="center">
   <img src="/images/go2.png" alt="Alt text" width="800"/>
