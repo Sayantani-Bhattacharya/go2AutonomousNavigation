@@ -48,8 +48,6 @@
 enum class State
 {
     IDLE,
-    // MANUAL_NAV_MODE,
-    // AUTO_NAV_MODE,
     START,
     MOVING,
     REACHED_GOAL,
@@ -171,6 +169,8 @@ class Explore : public rclcpp::Node
                 }
             }
         }
+
+        // For Debugging:
         // RCLCPP_INFO(this->get_logger(), "Map received: width= %f", mMapWidth);
         // RCLCPP_INFO(this->get_logger(), "Map received: height= %f", mMapHeight);
         // RCLCPP_INFO(this->get_logger(), "Map received: resolution= %f", mMapResolution);
@@ -179,7 +179,7 @@ class Explore : public rclcpp::Node
         // RCLCPP_INFO(this->get_logger(), "Map received: origin z= %f", mMapOrigin.position.z);      
         // RCLCPP_INFO(this->get_logger(), "Map received: shape= %i", mMapGrid.size());
 
-        // Count occurrences
+        // Count occurrences.
         int count_100 = 0, count_0 = 0, count_neg1 = 0;
         for (const auto& row : mMapGrid) {
             for (int val : row) {
@@ -203,15 +203,8 @@ class Explore : public rclcpp::Node
         detect_frontiers();
       }
 
-      // void curr_pose_sub_callback(const geometry_msgs::msg::PoseStamped msg)
-      // {
-      //   mCurrPose = msg;
-      //   RCLCPP_INFO(this->get_logger(), "Current pose received: x= %f, y= %f", msg.pose.position.x, msg.pose.position.y);
-      // }
-
       void publish_frontier_markers(std::vector<std::pair<int, int>> frontiers)
       {
-        //std::vector<std::pair<int, int>> frontiers
         if (frontiers.empty())
         {
           RCLCPP_INFO(this->get_logger(), "No frontiers to publish.");
@@ -242,21 +235,17 @@ class Explore : public rclcpp::Node
           marker.color.r = 0.0;
           marker.color.g = 1.0;
           marker.color.b = 0.0;
-          marker.color.a = 1.0;   // Don't forget to set the alpha!
+          marker.color.a = 1.0;  
           markerArray.markers.push_back(marker);
           id++;
         }
-
-        // only if using a MESH_RESOURCE marker type:
-        // marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
-        // marker.lifetime = rclcpp::Duration::from_nanoseconds(1000);
         frontier_marker_pub->publish(markerArray);
         return;
       }
 
       void publish_goal_marker(std::pair<int, int> goalPose)
       {
-        // have a default wierd value.
+        // Have a default wierd value.
         // if (goalPose.first.empty() || goalPose.second.empty())
         // {
         //   RCLCPP_INFO(this->get_logger(), "Goal Pose not exist.");
@@ -356,6 +345,9 @@ class Explore : public rclcpp::Node
 
       void lookup_transform()
       {
+        /*
+        Lookup the real-time transforms between odom and base_footprint coordinate frames.
+        */
         
         geometry_msgs::msg::TransformStamped t;
         if (!tf_buffer) 
@@ -388,6 +380,9 @@ class Explore : public rclcpp::Node
 
       void publish_goal(std::pair<int, int> goalPose)
       {
+        /*
+        Publish the goal pose for the robot to move to.
+        */
         geometry_msgs::msg::PoseStamped goalMsg;          
         goalMsg.pose.position.x = goalPose.first;
         goalMsg.pose.position.y = goalPose.second;
@@ -401,6 +396,9 @@ class Explore : public rclcpp::Node
 
       void timer_callback()
       {
+        /*
+        Timer callback to check the robot state and publish the goal pose.
+        */
         lookup_transform();
         if (!mFrontiers.empty())
         {
@@ -414,7 +412,6 @@ class Explore : public rclcpp::Node
           {
             RCLCPP_INFO(this->get_logger(), "[Explore] Robot Started.");
             mCurrGoalPose = explore(); 
-            // publish_goal(mCurrGoalPose);         
             mRobotState = State::MOVING;
           }
           if ( std::hypot(mCurrGoalPose.first - mCurrPose_wrt_map[0], mCurrGoalPose.second - mCurrPose_wrt_map[1]) < mDiagonalTollerance)
@@ -426,7 +423,6 @@ class Explore : public rclcpp::Node
           {
             RCLCPP_INFO(this->get_logger(), "[Explore] Robot state idle.");
             mCurrGoalPose = explore(); 
-            // publish_goal(mCurrGoalPose); 
             mRobotState = State::MOVING;
           }
           publish_goal(mCurrGoalPose); 
