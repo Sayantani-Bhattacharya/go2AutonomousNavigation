@@ -1,4 +1,4 @@
-# Multi Hetero Agent Exploration by Unitree GOs 
+# ROS2 Package for Autnomous Navigation of Unitree GO2.
 
 Author: Sayantani Bhattacharya
 
@@ -13,17 +13,16 @@ fastest possible speed. Agents would be aware of each-other’s presence and wor
 
 ## Block diagram
 
-1. Complete system:</br>
+<!-- 1. Complete system:</br>
 <p align="right">
   <img src="/images/system_block.png" alt="Alt text" width="700"/>
-</p>
- 
+</p> -->
 
-2. Individual cluster:</br>
-    (subject to modifications) </br>
-    <p align="right">
-     <img src="/images/indv_block.png" alt="Alt text" width="700"/>
-    </p>
+<!-- 2. The Block diagram:</br>
+    (subject to modifications) </br> -->
+<p align="right">
+  <img src="/images/go2.png" alt="Alt text" width="700"/>
+</p>
 
 ## Tools and References:
 
@@ -43,15 +42,3 @@ fastest possible speed. Agents would be aware of each-other’s presence and wor
   - Python
   - Unitree SDK - GO1 and GO2
   - Slam, RTabMap, gmapping and Nav2 pkg
-
-### Reference repositories:
-  - Unitree Package abstracted layer developed by Nick Morales, Marno Nel, and Katie Hughes:  https://github.com/ngmor/unitree_nav 
-  - Unitree ros2 wrapper: https://github.com/katie-hughes/unitree_ros2 
-  - Visual slam route: https://github.com/GogiPuttar/Search-and-Rescue_Robot_Dog_Unitree_Go1
-  - Graph based slam route: https://roy2909.github.io/Exploration/
-
-### Reference papers for collaborative exploration:
-  - Awesome paper: https://arxiv.org/pdf/2108.08325 || Has a lot of references, inside: see the annotations.
-  - Paper of 12 drone c-slam, with github code: http://arxiv.org/pdf/2108.05756 
-  - C-SLAM subproblems such as map merging (Lee et al., 2012), practical implementations (Kshirsagar et al., 2018), particle filter techniques.
-  - ICRA 2023: generalized back-end for c-slam https://www.youtube.com/watch?v=oypURkSuMc4 
