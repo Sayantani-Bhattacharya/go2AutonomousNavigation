@@ -4,30 +4,23 @@ Author: Sayantani Bhattacharya
 
 ## Project Overview
 
-To build a swarm of quadrupeds, capable of collaborative exploration missions, in hazardous/dangerous terrains.
-Quadrupeds are ideal for moving in uneven areas like mines, forests, etc and thus chosen for the task. The aim is to 
-build a system that performs localization, mapping, navigation and attention detection (can be a human/hazard prone area, 
-depending on the task). Each quadruped would have these capabilities, and would also have the ability to merge the 
-information from the agents in its vicinity (decentralized), to make a more robust system, and explore an area at the 
-fastest possible speed. Agents would be aware of each-other’s presence and work in collaboration with each other.
+Navigating complex and dangerous terrains autonomously, this system equips the Unitree GO2 quadruped with advanced exploration capabilities. Designed for unstructured environments, it integrates real-time localization, mapping, and intelligent navigation to move efficiently through forests, rubble, or unknown spaces. The robot autonomously detects frontiers, selects optimal paths, and avoids obstacles, ensuring safe and effective traversal. With a state-machine-driven approach and real-time sensor feedback, it dynamically adapts to its surroundings, making decisions on the fly. Whether mapping unknown areas or assisting in hazardous missions, this system pushes the boundaries of quadrupedal autonomy, bridging the gap between robotic perception and intelligent motion.
+
 
 ## Block diagram
 
-<!-- 1. Complete system:</br>
-<p align="right">
-  <img src="/images/system_block.png" alt="Alt text" width="700"/>
-</p> -->
-
-<!-- 2. The Block diagram:</br>
-    (subject to modifications) </br> -->
-<p align="right">
-  <img src="/images/go2.png" alt="Alt text" width="700"/>
+<p align="center">
+  <img src="/images/go2.png" alt="Alt text" width="800"/>
 </p>
 
 ## Repository Structure
 
-There are 3 main packages, in the for of nested submodules to maintain clarity of code. 
-The following are the abstaction layer, starting from the lowest layer.
+There are three main packages in the form of nested submodules ensuring code clarity, efficiency, and adaptability. 
+At its core, high-level controls interact fluidly with the GO2 ROS2 SDK, bridging the gap between perception and action. The manual navigation module empowers users with precise control, featuring robust state publishing, real-time transform broadcasting, and LiDAR-driven mapping for dynamic visualization in RViz. Building upon this foundation, the autonomous navigation package takes exploration to the next level—leveraging nearest-frontier strategies and a state-machine-driven approach to efficiently map unknown terrains.
+
+
+</br>
+The following are the abstaction layers, starting from the lowest layer:
 
 - Implemented high level controls that interacts with the Unitree GO2 ROS2 SDK.
 
@@ -54,18 +47,15 @@ The following are the abstaction layer, starting from the lowest layer.
 ## Tools:
 
 ### Hardware:
-  - Unitree GO1-GO2.
-  - Zed Camera/ Lidar (Need to confirm).
-  - Jetson Orin Nano.
-  - buck-convertor (24V->12V).
-  - 3D print the mount for unitree.
-  - Display port adapters for Jetson.
-  - Ethernet cable for initial testing with unitree sdk.
-  - Micro SD cards.
+  - Unitree GO2.
+  - 4D Lidar.
+  - System76 for on-board computation.
+  - System76 for real-time visualisation.
+  - Ethernet cable.
 
 ### Software : 
-  - C++
+  - C++ Jazzy
   - ROS2
   - Python
-  - Unitree SDK - GO1 and GO2
-  - Slam, RTabMap, gmapping and Nav2 pkg
+  - Unitree SDK GO2
+  - ROS2 pkgs: RTabMap and Nav2.
