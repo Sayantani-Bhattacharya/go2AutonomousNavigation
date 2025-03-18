@@ -1,22 +1,35 @@
-// A node that subscribes to /map data and publishes a ed nav goal for the robot to explore the map.
-// The robot will explore the map by moving to the nearest frontier point.
-// The robot will stop exploring when the map is fully explored or with a user service call.
-// Increase the footprint of the robot in the costmap to avoid collision with the map.: this is done by setting the radius of the robot to 0.3m in the costmap_common_params.yaml file. -----> see
+/**
+ * @file explore.cpp
+ * @brief A ROS 2 node for autonomous exploration using frontier-based exploration.
+ *  
+ * A node that subscribes to /map data and publishes a ed nav goal for the robot to explore the map. 
+ * The robot will explore the map by moving to the nearest frontier point.
+ * The robot will stop exploring when the map is fully explored or with a user service call.
+ * Increase the footprint of the robot in the costmap to avoid collision with the map.: this is done by setting the radius of the robot to 0.3m in the costmap_common_params.yaml file. -----> see 
+ * 
+ * Services:
+ * 1. /explore_start : Service to start exploring the map.
+ * 2. /explore_stop : Service to stop the robot from exploring the map.
+ * 
+ * 
+ * Subscribers:
+ * 1. /map : Subscribes to the map data.
+ * 2. /goal_reached : Subscribes to the goal pose for the robot to move to.
+ * 3. lookup transform
+ * 
+ * 
+ * Algorithm:
+ * seach frontiers, find the nearest frontier, publish the goal pose, move to the goal pose, repeat.
+ * 
+ * 
+ * Publishers:
+ * frontier_markers : Publishes the frontier points on the map.
+ * 
+ * 
+ * This node subscribes to map data, detects frontiers, and publishes navigation goals for the robot.
+ * The robot moves to the nearest frontier point until the map is fully explored or a user service call requests a stop.
+ */
 
-// Services:
-// 1. /explore_start : Service to start exploring the map.
-// 2. /explore_stop : Service to stop the robot from exploring the map.
-
-// Subscribers:
-// 1. /map : Subscribes to the map data.
-// 2. /goal_reached : Subscribes to the goal pose for the robot to move to.
-// 3. lookup transform
-
-// Algorithm:
-// seach frontiers, find the nearest frontier, publish the goal pose, move to the goal pose, repeat.
-
-// Publishers:
-// frontier_markers : Publishes the frontier points on the map.
 
 #include <exception>
 #include <vector>
@@ -44,21 +57,33 @@
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/buffer.h"
 
-// State machine
+
+/**
+ * @enum State
+ * @brief State machine for robot exploration.
+ */
 enum class State
 {
-    IDLE,
-    START,
-    MOVING,
-    REACHED_GOAL,
-    E_STOP,
+    IDLE,          ///< Robot is idle.
+    START,         ///< Robot is starting exploration.
+    MOVING,        ///< Robot is moving to a goal.
+    REACHED_GOAL,  ///< Robot has reached the goal.
+    E_STOP         ///< Emergency stop triggered.
 };
 
 using namespace std::chrono_literals;
 
+/**
+ * @class Explore
+ * @brief The Explore class handles frontier-based exploration using ROS 2.
+ */
 class Explore : public rclcpp::Node
-{
+{    
     public:
+
+      /**
+       * @brief Constructor for the Explore class.
+      */
      Explore():Node("explore")
      { 
         // Services
@@ -114,7 +139,11 @@ class Explore : public rclcpp::Node
       rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr frontier_marker_pub;
       rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub;
 
-
+      /**
+     * @brief Callback function to start exploration using the service.
+     * @param request Service request.
+     * @param response Service response.
+     */
       void nav_start_trigger_callback(const std::shared_ptr<go2_exploration_interfaces::srv::Empty::Request> request, std::shared_ptr<go2_exploration_interfaces::srv::Empty::Response> response)
       {
         if(mRobotState == State::START)
@@ -129,6 +158,11 @@ class Explore : public rclcpp::Node
         response->r = true;
       } 
 
+      /**
+     * @brief Callback function to stop exploration using the service.
+     * @param request Service request.
+     * @param response Service response.
+     */
       void nav_stop_trigger_callback(const std::shared_ptr<go2_exploration_interfaces::srv::Empty::Request> request, std::shared_ptr<go2_exploration_interfaces::srv::Empty::Response> response)
       {
         RCLCPP_INFO(this->get_logger(), "Stopping Exploration.");
@@ -136,6 +170,10 @@ class Explore : public rclcpp::Node
         response->r = true;
       } 
 
+      /**
+     * @brief Callback function for map data updates.
+     * @param msg OccupancyGrid message containing the map.
+     */
       void map_sub_callback(const nav_msgs::msg::OccupancyGrid msg)
       {
         /*
@@ -203,6 +241,10 @@ class Explore : public rclcpp::Node
         detect_frontiers();
       }
 
+      /**
+     * @brief Publish frontier markers for visualization.
+     * @param frontiers Vector of frontier coordinates.
+     */
       void publish_frontier_markers(std::vector<std::pair<int, int>> frontiers)
       {
         if (frontiers.empty())
@@ -243,6 +285,10 @@ class Explore : public rclcpp::Node
         return;
       }
 
+      /**
+     * @brief Publish goal marker for visualization.
+     * @param goalPose Goal coordinates.
+     */
       void publish_goal_marker(std::pair<int, int> goalPose)
       {
         // Have a default wierd value.
@@ -277,6 +323,11 @@ class Explore : public rclcpp::Node
         return;
       }
 
+      
+      /**
+     * @brief Detect frontiers from the occupancy grid.
+     * @return Vector of frontier coordinates.
+     */
       std::vector<std::pair<int, int>> detect_frontiers()
       {
         /*
@@ -317,6 +368,10 @@ class Explore : public rclcpp::Node
         return frontiers;        
       }
 
+      /**
+     * @brief Perform exploration by navigating to the nearest frontier.
+     * @return Coordinates of the next goal.
+     */
       std::pair<int,int> explore()
       {
         // Todo: add direction (yaw) calculation.
@@ -343,12 +398,11 @@ class Explore : public rclcpp::Node
         return nearest_frontier;
       }
 
+      /**
+     * @brief Lookup and store the real-time transforms between odom and base_footprint coordinate frames.
+     */
       void lookup_transform()
-      {
-        /*
-        Lookup the real-time transforms between odom and base_footprint coordinate frames.
-        */
-        
+      {        
         geometry_msgs::msg::TransformStamped t;
         if (!tf_buffer) 
         {
@@ -378,11 +432,13 @@ class Explore : public rclcpp::Node
         mCurrPose_wrt_map = {x, y, z};          
       }
 
+
+      /**
+     * @brief Publish the goal pose for the robot to move to.
+     * @param goalPose Goal coordinates.
+     */
       void publish_goal(std::pair<int, int> goalPose)
       {
-        /*
-        Publish the goal pose for the robot to move to.
-        */
         geometry_msgs::msg::PoseStamped goalMsg;          
         goalMsg.pose.position.x = goalPose.first;
         goalMsg.pose.position.y = goalPose.second;
@@ -394,11 +450,11 @@ class Explore : public rclcpp::Node
         RCLCPP_INFO(this->get_logger(), "[Explore] Robot state moving.");
       }
 
+      /**
+      * @brief Timer callback for managing state transitions and goal publishing.
+      */
       void timer_callback()
       {
-        /*
-        Timer callback to check the robot state and publish the goal pose.
-        */
         lookup_transform();
         if (!mFrontiers.empty())
         {
@@ -434,6 +490,12 @@ class Explore : public rclcpp::Node
       }
 };
 
+/**
+ * @brief Main entry point for the Explore node.
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ * @return Exit status.
+ */
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
